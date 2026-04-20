@@ -1,12 +1,83 @@
 #!/usr/bin/env python3
 """
-HumanDesignHD - Open source Human Design chart calculator
+Projector.Solutions HD Engine - Unified
 Built in English, for everyone.
 """
 
 import swisseph as swe
-from datetime import datetime, timezone
-import math
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from geopy.geocoders import Nominatim
+from timezonefinder import TimezoneFinder
+import pytz
+from datetime import datetime
+
+app = FastAPI(title="Projector.Solutions HD Engine")
+
+# Initialize the location tools
+geolocator = Nominatim(user_agent="projector_solutions_api")
+tf = TimezoneFinder()
+
+class BirthData(BaseModel):
+    year: int
+    month: int
+    day: int
+    hour: int
+    minute: int
+    city: str  # Replaced utc_offset
+
+def get_historical_offset(city: str, year: int, month: int, day: int, hour: int, minute: int) -> float:
+    """Converts a city string to the exact UTC offset for a specific historical date/time."""
+    # 1. Geocode the city
+    location = geolocator.geocode(city)
+    if not location:
+        raise ValueError(f"Could not locate the city: {city}. Try adding the state or country.")
+
+    # 2. Find the Timezone name (e.g., 'America/Boise')
+    tz_name = tf.timezone_at(lng=location.longitude, lat=location.latitude)
+    if not tz_name:
+        raise ValueError("Could not determine the timezone for those coordinates.")
+
+    # 3. Calculate the exact UTC offset for that specific date (automatically handles DST)
+    local_tz = pytz.timezone(tz_name)
+    dt_naive = datetime(year, month, day, hour, minute)
+    
+    try:
+        dt_aware = local_tz.localize(dt_naive)
+    except pytz.exceptions.AmbiguousTimeError:
+        # Handles the rare 1-hour overlap during Fall DST switch
+        dt_aware = local_tz.localize(dt_naive, is_dst=False)
+
+    # Convert seconds to hours
+    offset_hours = dt_aware.utcoffset().total_seconds() / 3600
+    return offset_hours
+
+@app.post("/generate-chart")
+def generate_chart(data: BirthData):
+    try:
+        # Auto-calculate the offset based on the city and birth date
+        calculated_offset = get_historical_offset(
+            data.city, data.year, data.month, data.day, data.hour, data.minute
+        )
+
+        result = calculate_chart(
+            birth_year=data.year,
+            birth_month=data.month,
+            birth_day=data.day,
+            birth_hour=data.hour,
+            birth_minute=data.minute,
+            utc_offset=calculated_offset
+        )
+        
+        # Inject the parsed location data into the payload so the frontend can display it
+        result["location_metadata"] = {
+            "query": data.city,
+            "calculated_offset": calculated_offset
+        }
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # Set ephemeris path (uses built-in moshier ephemeris - no files needed)
 swe.set_ephe_path('')
@@ -16,8 +87,6 @@ swe.set_ephe_path('')
 # Each gate spans 5.625 degrees (360 / 64 gates)
 # ─────────────────────────────────────────────
 
-# Gate sequence in ecliptic degree order starting from 28°15' Pisces (358.25°)
-# Source: barneyandflow.com/gate-zodiac-degrees
 GATE_SEQUENCE = [
     25, 17, 21, 51, 42, 3,   # Aries
     27, 24, 2,  23, 8,  20,  # Taurus
@@ -34,42 +103,6 @@ GATE_SEQUENCE = [
 
 HD_START_DEGREE = 358.25  # 28°15' Pisces
 
-GATE_NAMES = {
-    1: "The Creative", 2: "The Receptive", 3: "Ordering",
-    4: "Formulization", 5: "Fixed Rhythms", 6: "Friction",
-    7: "The Role of the Self", 8: "Holding Together", 9: "Focus",
-    10: "Behavior of the Self", 11: "Ideas", 12: "Caution",
-    13: "The Listener", 14: "Power Skills", 15: "Extremes",
-    16: "Skills", 17: "Opinion", 18: "Correction",
-    19: "Wanting", 20: "Now", 21: "The Hunter/Huntress",
-    22: "Openness", 23: "Assimilation", 24: "Rationalization",
-    25: "Spirit of the Self", 26: "The Egoist", 27: "Caring",
-    28: "The Game Player", 29: "Saying Yes", 30: "Feelings",
-    31: "Influence", 32: "Continuity", 33: "Privacy",
-    34: "Power", 35: "Change", 36: "Crisis",
-    37: "Friendship", 38: "Opposition", 39: "Provocation",
-    40: "Aloneness", 41: "Contraction", 42: "Growth",
-    43: "Insight", 44: "Coming to Meet", 45: "Gathering Together",
-    46: "Pushing Upward", 47: "Realization", 48: "Depth",
-    49: "Principles", 50: "Values", 51: "Shock",
-    52: "Stillness", 53: "Development", 54: "Ambition",
-    55: "Spirit", 56: "Stimulation", 57: "Intuitive Clarity",
-    58: "Vitality", 59: "Sexuality", 60: "Limitation",
-    61: "Mystery", 62: "Detail", 63: "Doubt", 64: "Confusion"
-}
-
-# Channels: pairs of gates that connect centers
-CHANNELS = [
-    (1, 8), (2, 14), (3, 60), (4, 63), (5, 15),
-    (6, 59), (7, 31), (9, 52), (10, 20), (11, 56),
-    (12, 22), (13, 33), (16, 48), (17, 62), (18, 58),
-    (19, 49), (20, 34), (20, 57), (21, 45), (23, 43),
-    (24, 61), (25, 51), (26, 44), (27, 50), (28, 38),
-    (29, 46), (30, 41), (32, 54), (34, 57), (35, 36),
-    (37, 40), (39, 55), (42, 53), (47, 64)
-]
-
-# Centers and which gates belong to them
 CENTERS = {
     "Head":     [61, 63, 64],
     "Ajna":     [4, 11, 17, 24, 43, 47],
@@ -82,7 +115,16 @@ CENTERS = {
     "Heart":    [21, 26, 40, 51]
 }
 
-# Centers connected by each channel (for type determination)
+CHANNELS = [
+    (1, 8), (2, 14), (3, 60), (4, 63), (5, 15),
+    (6, 59), (7, 31), (9, 52), (10, 20), (11, 56),
+    (12, 22), (13, 33), (16, 48), (17, 62), (18, 58),
+    (19, 49), (20, 34), (20, 57), (21, 45), (23, 43),
+    (24, 61), (25, 51), (26, 44), (27, 50), (28, 38),
+    (29, 46), (30, 41), (32, 54), (34, 57), (35, 36),
+    (37, 40), (39, 55), (42, 53), (47, 64)
+]
+
 CHANNEL_CENTERS = {
     (1, 8):   ("Self", "Throat"),
     (2, 14):  ("Self", "Sacral"),
@@ -121,7 +163,6 @@ CHANNEL_CENTERS = {
 }
 
 def degree_to_gate_line(degree):
-    """Convert ecliptic degree to HD gate and line."""
     gate_size = 360 / 64
     line_size = gate_size / 6
     adjusted = (degree - HD_START_DEGREE) % 360
@@ -130,10 +171,29 @@ def degree_to_gate_line(degree):
     return GATE_SEQUENCE[index], line
 
 def get_planet_positions(jd):
-    """Get gate/line for all HD-relevant planets."""
+    """Get gate/line for all HD-relevant planets in standard Jovian Archive order."""
+    results = {}
+    
+    # 1. Sun & Earth
+    sun_deg = swe.calc_ut(jd, swe.SUN)[0][0]
+    gate, line = degree_to_gate_line(sun_deg)
+    results["Sun"] = {"degree": sun_deg, "gate": gate, "line": line}
+    
+    earth_deg = (sun_deg + 180) % 360
+    gate, line = degree_to_gate_line(earth_deg)
+    results["Earth"] = {"degree": earth_deg, "gate": gate, "line": line}
+
+    # 2. Nodes (True Node)
+    nn_deg = swe.calc_ut(jd, swe.TRUE_NODE)[0][0]
+    gate, line = degree_to_gate_line(nn_deg)
+    results["N.Node"] = {"degree": nn_deg, "gate": gate, "line": line}
+
+    sn_deg = (nn_deg + 180) % 360
+    gate, line = degree_to_gate_line(sn_deg)
+    results["S.Node"] = {"degree": sn_deg, "gate": gate, "line": line}
+
+    # 3. Remaining Planets
     planets = {
-        "Sun":     swe.SUN,
-        "Earth":   None,  # opposite of Sun
         "Moon":    swe.MOON,
         "Mercury": swe.MERCURY,
         "Venus":   swe.VENUS,
@@ -143,31 +203,16 @@ def get_planet_positions(jd):
         "Uranus":  swe.URANUS,
         "Neptune": swe.NEPTUNE,
         "Pluto":   swe.PLUTO,
-        "N.Node":  swe.TRUE_NODE,
     }
-    
-    results = {}
+
     for name, planet_id in planets.items():
-        if name == "Earth":
-            sun_deg = swe.calc_ut(jd, swe.SUN)[0][0]
-            earth_deg = (sun_deg + 180) % 360
-            gate, line = degree_to_gate_line(earth_deg)
-            results[name] = {"degree": earth_deg, "gate": gate, "line": line}
-        else:
-            pos = swe.calc_ut(jd, planet_id)[0][0]
-            gate, line = degree_to_gate_line(pos)
-            results[name] = {"degree": pos, "gate": gate, "line": line}
-    
-    # South Node = opposite of North Node
-    nn_deg = results["N.Node"]["degree"]
-    sn_deg = (nn_deg + 180) % 360
-    gate, line = degree_to_gate_line(sn_deg)
-    results["S.Node"] = {"degree": sn_deg, "gate": gate, "line": line}
-    
+        pos = swe.calc_ut(jd, planet_id)[0][0]
+        gate, line = degree_to_gate_line(pos)
+        results[name] = {"degree": pos, "gate": gate, "line": line}
+        
     return results
 
 def get_defined_centers(all_gates):
-    """Determine which centers are defined based on active channels."""
     defined = set()
     gate_set = set(all_gates)
     
@@ -179,23 +224,36 @@ def get_defined_centers(all_gates):
                 defined.add(c2)
     return defined
 
-def determine_type(defined_centers):
-    """Determine HD type from defined centers."""
+def determine_type(defined_centers, all_gates):
     has_sacral = "Sacral" in defined_centers
     has_throat = "Throat" in defined_centers
-    has_motor = any(c in defined_centers for c in ["Sacral", "Heart", "Solar Plexus", "Root"])
+    
+    motor_centers = {"Sacral", "Heart", "Solar Plexus", "Root"}
     motor_to_throat = False
     
-    # Check if any motor is connected to throat
-    motor_centers = {"Sacral", "Heart", "Solar Plexus", "Root"}
-    if has_throat:
-        for g1, g2 in CHANNELS:
+    gate_set = set(all_gates)
+    graph = {center: set() for center in CENTERS.keys()}
+    
+    for g1, g2 in CHANNELS:
+        if g1 in gate_set and g2 in gate_set:
             if (g1, g2) in CHANNEL_CENTERS:
                 c1, c2 = CHANNEL_CENTERS[(g1, g2)]
-                if (c1 in motor_centers and c2 == "Throat") or \
-                   (c2 in motor_centers and c1 == "Throat"):
+                graph[c1].add(c2)
+                graph[c2].add(c1)
+
+    if has_throat:
+        visited = set()
+        queue = ["Throat"]
+        
+        while queue:
+            current = queue.pop(0)
+            if current not in visited:
+                visited.add(current)
+                if current in motor_centers:
                     motor_to_throat = True
-    
+                    break
+                queue.extend(list(graph[current] - visited))
+
     if not defined_centers:
         return "Reflector"
     elif has_sacral and motor_to_throat:
@@ -208,7 +266,6 @@ def determine_type(defined_centers):
         return "Projector"
 
 def determine_authority(defined_centers):
-    """Determine inner authority from defined centers."""
     priority = [
         ("Solar Plexus", "Emotional"),
         ("Sacral", "Sacral"),
@@ -222,55 +279,43 @@ def determine_authority(defined_centers):
     return "Mental/Outer"
 
 def calculate_chart(birth_year, birth_month, birth_day, birth_hour, birth_minute, utc_offset):
-    """Calculate a complete Human Design chart."""
-    
-    # Convert to UTC
     utc_hour = birth_hour - utc_offset
     jd_personality = swe.julday(birth_year, birth_month, birth_day, 
                                  utc_hour + birth_minute/60)
     
-    # Design date: Sun position 88 degrees earlier (~88 days before birth)
-    # Design date: find exact moment Sun was 88 degrees behind personality Sun
-    # Using binary search for solar arc (more accurate than 88 days)
     p_sun_deg = swe.calc_ut(jd_personality, swe.SUN)[0][0]
     target_design_deg = (p_sun_deg - 88) % 360
     jd_low = jd_personality - 100
     jd_high = jd_personality - 80
+    
     for _ in range(50):
-         jd_mid = (jd_low + jd_high) / 2
-         sun_deg = swe.calc_ut(jd_mid, swe.SUN)[0][0]
-         diff = (sun_deg - target_design_deg + 180) % 360 - 180
-         if abs(diff) < 0.0001:
+        jd_mid = (jd_low + jd_high) / 2
+        jd_design = jd_mid
+        sun_deg = swe.calc_ut(jd_mid, swe.SUN)[0][0]
+        diff = (sun_deg - target_design_deg + 180) % 360 - 180
+        if abs(diff) < 0.0001:
             break
-         if diff > 0:
+        if diff > 0:
             jd_high = jd_mid
-         else:
+        else:
             jd_low = jd_mid
-            jd_design = jd_mid
     
-    # Get personality (conscious) positions
     personality = get_planet_positions(jd_personality)
-    
-    # Get design (unconscious) positions  
     design = get_planet_positions(jd_design)
     
-    # Collect all active gates
     all_gates = set()
     for p in personality.values():
         all_gates.add(p["gate"])
     for p in design.values():
         all_gates.add(p["gate"])
     
-    # Determine defined centers
     defined_centers = get_defined_centers(all_gates)
     
-    # Profile: line of personality Sun / line of design Sun
     p_sun_line = personality["Sun"]["line"]
     d_sun_line = design["Sun"]["line"]
     profile = f"{p_sun_line}/{d_sun_line}"
     
-    # Type and authority
-    hd_type = determine_type(defined_centers)
+    hd_type = determine_type(defined_centers, all_gates)
     authority = determine_authority(defined_centers)
     
     return {
@@ -285,7 +330,6 @@ def calculate_chart(birth_year, birth_month, birth_day, birth_hour, birth_minute
     }
 
 def print_chart(result, name=""):
-    """Pretty print a Human Design chart."""
     print(f"\n{'='*50}")
     if name:
         print(f"  Human Design Chart: {name}")
@@ -309,13 +353,28 @@ def print_chart(result, name=""):
     print(f"{'='*50}\n")
 
 if __name__ == "__main__":
-    # October 9, 1988, 5:30 AM Sacramento CA (PDT = UTC-7)
-    result = calculate_chart(
-        birth_year=1988,
-        birth_month=10,
-        birth_day=9,
-        birth_hour=5,
-        birth_minute=30,
-        utc_offset=-7
-    )
-    print_chart(result, "Geode")
+    print("\n✦ Human Design Chart Engine ✦\n")
+    name = input("Name: ")
+    city = input("City, State/Country (e.g., Boise, Idaho): ")
+    birth_year = int(input("Birth year (e.g. 1988): "))
+    birth_month = int(input("Birth month (e.g. 10): "))
+    birth_day = int(input("Birth day (e.g. 9): "))
+    birth_hour = int(input("Birth hour in 24hr format (e.g. 14): "))
+    birth_minute = int(input("Birth minute (e.g. 30): "))
+    
+    # Test the geocoding logic locally
+    try:
+        calculated_offset = get_historical_offset(city, birth_year, birth_month, birth_day, birth_hour, birth_minute)
+        print(f"\n[System] Found '{city}'. UTC Offset for this date: {calculated_offset}")
+        
+        result = calculate_chart(
+            birth_year=birth_year,
+            birth_month=birth_month,
+            birth_day=birth_day,
+            birth_hour=birth_hour,
+            birth_minute=birth_minute,
+            utc_offset=calculated_offset
+        )
+        print_chart(result, name)
+    except Exception as e:
+        print(f"\n[Error] {e}")
