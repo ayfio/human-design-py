@@ -1,0 +1,16 @@
+# requirements.txt
+# Core HD calculation
+pyswisseph>=2.10.3.2
+
+# API framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.0
+
+# Geocoding & timezone
+geopy>=2.4.1
+timezonefinder>=6.2.0
+pytz>=2023.3
+
+# HTTP client for health checks (опционально)
+httpx>=0.26.0
