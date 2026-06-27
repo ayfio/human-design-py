@@ -1,6 +1,31 @@
 # Dockerfile
 FROM python:3.11-slim
+FROM python:3.11-slim
 
+# Системные зависимости для компиляции pyswisseph
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libssl-dev \
+    libffi-dev \
+    wget \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Рабочая директория
+WORKDIR /app
+
+# Копируем зависимости и устанавливаем
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Копируем код приложения
+COPY . .
+
+# Порт для Gradio + FastAPI
+EXPOSE 7860
+
+# Запуск по умолчанию: Gradio UI + API
+CMD ["python", "app_gradio.py"]
 # Системные зависимости для компиляции pyswisseph и geocoding
 RUN apt-get update && apt-get install -y \
     build-essential \
