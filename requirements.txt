@@ -1,16 +1,24 @@
-# requirements.txt
-# Core HD calculation
-pyswisseph>=2.10.3.2
+# 🔭 Swiss Ephemeris (ядро расчётов)
+pyswisseph==2.10.03.1
 
-# API framework
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-pydantic>=2.5.0
+# 🌐 FastAPI сервер
+fastapi==0.109.0
+uvicorn==0.27.0
 
-# Geocoding & timezone
-geopy>=2.4.1
-timezonefinder>=6.2.0
-pytz>=2023.3
+# ✅ Валидация данных
+pydantic==2.5.3
 
-# HTTP client for health checks (опционально)
-httpx>=0.26.0
+# 🌍 Геокодинг и часовые пояса
+geopy==2.4.1
+timezonefinder==6.2.0
+pytz==2023.3
+
+# 🎨 Веб-интерфейсы
+gradio==4.19.2
+streamlit==1.31.0
+
+# 🧪 Тесты (опционально)
+pytest==7.4.4
+
+# 🔧 Утилиты
+python-dotenv==1.0.1
