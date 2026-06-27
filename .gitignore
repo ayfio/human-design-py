@@ -1,149 +1,18 @@
-# .gitignore
-
 # Python
-__pycache__/
-*.py[cod]# =============================================================================
-# Python
-# =============================================================================
 __pycache__/
 *.py[cod]
 *$py.class
-*.pyo
-*.pyd
-.Python
-.pytest_cache/
-.mypy_cache/
-
-# Компилированные расширения (ОСТАВИТЬ, Railway скомпилирует сам)
 *.so
-*.pyd
-
-# =============================================================================
-# Сборка и дистрибуция
-# =============================================================================
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# =============================================================================
-# Virtual environments (ОБЯЗАТЕЛЬНО игнорировать)
-# =============================================================================
+.Python
+env/
 venv/
 ENV/
-env/
-.venv/
-venv.bak/
-
-# =============================================================================
-# IDE и редакторы
-# =============================================================================
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-.project
-.pydevproject
-*.sublime-project
-*.sublime-workspace
-
-# =============================================================================
-# Environment variables (НИКОГДА не коммитить!)
-# =============================================================================
-.env
-.env.local
-.env.*.local
-*.env
-!.env.example  # ← Разрешаем пример для документации
-
-# =============================================================================
-# Railway / Render / Деплой
-# =============================================================================
-# Игнорируем локальные конфиги, но разрешаем шаблоны
-.railway/
-!.railway.example/
-.render/
-!.render.example/
-
-# Локальные логи деплоя
-railway.log
-render.log
-
-# =============================================================================
-# Ephemeral / Временные данные
-# =============================================================================
-*.log
-*.sqlite3
-*.db
-*.db-shm
-*.db-wal
-tmp/
-temp/
-*.tmp
-*.temp
-
-# =============================================================================
-# Тесты и покрытие
-# =============================================================================
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache/
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-
-# =============================================================================
-# Документация
-# =============================================================================
-docs/_build/
-site/
-
-# =============================================================================
-# ОС и редакторы
-# =============================================================================
-.DS_Store
-Thumbs.db
-*.log
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
+dist/
+build/
 
 # Virtual environments
-venv/
-ENV/
-env/
+hd_engine_env/
 .venv/
 
 # IDE
@@ -151,15 +20,39 @@ env/
 .vscode/
 *.swp
 *.swo
+*~
+.project
+.pydevproject
 
-# Environment variables
-.env
-.env.local
-.env.*.local
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
 
-# Railway/Railway CLI
-.railway/
-
-# Ephemeral data
+# Logs
 *.log
-*.sqlite3
+logs/
+
+# Gradio/Streamlit cache
+.gradio/
+.streamlit/
+static/
+
+# Secrets (never commit these!)
+.env
+*.key
+*.pem
+*.crt
+secrets/
+
+# Local config overrides
+config.local.py
+settings.local.py
+
+# Test coverage
+htmlcov/
+.coverage
+.pytest_cache/
+
+# Docker
+!.dockerignore
